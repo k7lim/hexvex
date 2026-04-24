@@ -436,25 +436,161 @@ function testVisualDesignCompliance() {
 }
 
 /**
+ * Viewport Containment Tests
+ * Verify that all critical game elements remain visible without scrolling
+ */
+
+// Helper: check that an element's bottom edge is within the viewport
+function assertWithinViewport(element, label) {
+    const rect = element.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    if (rect.bottom > viewportHeight) {
+        throw new Error(`${label} extends below viewport (bottom: ${Math.round(rect.bottom)}px, viewport: ${viewportHeight}px)`);
+    }
+    if (rect.top < 0) {
+        throw new Error(`${label} extends above viewport (top: ${Math.round(rect.top)}px)`);
+    }
+}
+
+// Test: All critical elements fit within viewport during active gameplay
+function testViewportContainmentDuringGameplay() {
+    console.log('Testing: Viewport containment during gameplay...');
+
+    resetGameForTest();
+    initApp();
+
+    const questionArea = document.getElementById('question-area');
+    const optionsArea = document.getElementById('options-area');
+    const feedbackArea = document.getElementById('feedback-area');
+    const scoreDisplay = document.getElementById('score-display');
+
+    assertWithinViewport(scoreDisplay, 'Score display');
+    assertWithinViewport(questionArea, 'Question area');
+    assertWithinViewport(optionsArea, 'Options area');
+    assertWithinViewport(feedbackArea, 'Feedback area (hint button)');
+
+    console.log('✓ Viewport containment during gameplay test passed');
+}
+
+// Test: Play Again button is within viewport after completing a question
+async function testPlayAgainButtonWithinViewport() {
+    console.log('Testing: Play Again button within viewport...');
+
+    resetGameForTest();
+    initApp();
+    await waitForDOMUpdate();
+
+    // Click the correct answer to end the question and reveal Play Again
+    const optionsArea = document.getElementById('options-area');
+    let correctOption = null;
+    for (let option of optionsArea.children) {
+        if (option.dataset.isCorrect === 'true') {
+            correctOption = option;
+            break;
+        }
+    }
+
+    if (!correctOption) {
+        throw new Error('No correct option found');
+    }
+
+    simulateClick(correctOption);
+    await waitForDOMUpdate();
+
+    const newGameButton = document.getElementById('new-game-button');
+    if (newGameButton.style.display === 'none') {
+        throw new Error('Play Again button should be visible after correct answer');
+    }
+
+    assertWithinViewport(newGameButton, 'Play Again button');
+
+    console.log('✓ Play Again button within viewport test passed');
+}
+
+// Test: Body does not produce scrollable overflow
+function testNoScrollableOverflow() {
+    console.log('Testing: No scrollable overflow...');
+
+    resetGameForTest();
+    initApp();
+
+    const bodyStyle = window.getComputedStyle(document.body);
+    if (bodyStyle.overflow !== 'hidden') {
+        throw new Error('Body overflow should be hidden to prevent scrolling');
+    }
+
+    if (document.body.scrollHeight > window.innerHeight + 1) {
+        // Allow 1px tolerance for rounding
+        throw new Error(`Body scroll height (${document.body.scrollHeight}px) exceeds viewport (${window.innerHeight}px)`);
+    }
+
+    console.log('✓ No scrollable overflow test passed');
+}
+
+// Test: Feedback area stays within viewport after 3 wrong answers (worst case for content height)
+async function testViewportContainmentAfterWrongAnswers() {
+    console.log('Testing: Viewport containment after wrong answers...');
+
+    resetGameForTest();
+    initApp();
+    await waitForDOMUpdate();
+
+    // Make 3 incorrect guesses
+    const optionsArea = document.getElementById('options-area');
+    let guessCount = 0;
+
+    while (guessCount < 3) {
+        let incorrectOption = null;
+        for (let option of optionsArea.children) {
+            if (option.dataset.isCorrect === 'false') {
+                incorrectOption = option;
+                break;
+            }
+        }
+        if (!incorrectOption) break;
+
+        simulateClick(incorrectOption);
+        await waitForDOMUpdate();
+        guessCount++;
+    }
+
+    const newGameButton = document.getElementById('new-game-button');
+    if (newGameButton.style.display !== 'none') {
+        assertWithinViewport(newGameButton, 'Play Again button after wrong answers');
+    }
+
+    const feedbackArea = document.getElementById('feedback-area');
+    assertWithinViewport(feedbackArea, 'Feedback area after wrong answers');
+
+    console.log('✓ Viewport containment after wrong answers test passed');
+}
+
+/**
  * Run all E2E tests
  */
 function runAllE2ETests() {
     console.log('=== Running End-to-End Tests ===');
-    
+
     try {
         // Complete Game Flow Tests
         testPageLoadAndFirstQuestion();
         testCorrectAnswerFlow();
         testIncorrectAnswerFlow();
         testHintUsageFlow();
-        
+
         // Scoring Tests
         testAllScoringScenarios();
-        
+
         // Validation Tests
         testColorDistinctnessValidation();
         testVisualDesignCompliance();
-        
+
+        // Viewport Containment Tests
+        testViewportContainmentDuringGameplay();
+        testPlayAgainButtonWithinViewport();
+        testNoScrollableOverflow();
+        testViewportContainmentAfterWrongAnswers();
+
         console.log('\n✅ All End-to-End tests passed!');
         return true;
     } catch (error) {
@@ -473,6 +609,10 @@ if (typeof window !== 'undefined') {
         testHintUsageFlow,
         testAllScoringScenarios,
         testColorDistinctnessValidation,
-        testVisualDesignCompliance
+        testVisualDesignCompliance,
+        testViewportContainmentDuringGameplay,
+        testPlayAgainButtonWithinViewport,
+        testNoScrollableOverflow,
+        testViewportContainmentAfterWrongAnswers
     };
 }
